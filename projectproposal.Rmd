@@ -1,0 +1,26 @@
+options(scipen=999)
+file_path <- "spotify_cleaned.csv"
+dat0 <- read.csv(file_path, stringsAsFactors=FALSE, fileEncoding="latin1", check.names=FALSE)
+names(dat0) <- tolower(names(dat0))
+vars_num <- c("danceability","valence","energy","acousticness","instrumentalness","liveness","speechiness","bpm","charts")
+to_num <- function(x) suppressWarnings(as.numeric(x))
+dat0[vars_num] <- lapply(dat0[vars_num], to_num)
+mode_num <- suppressWarnings(as.numeric(dat0$mode))
+dat0$mode <- factor(ifelse(mode_num==1,"Major","Minor"), levels=c("Minor","Major"))
+keep_cols <- c("mode", vars_num)
+dat <- dat0[stats::complete.cases(dat0[, keep_cols]), keep_cols]
+n_obs <- nrow(dat)
+iqr_outliers <- function(x){q<-stats::quantile(x,c(.25,.75),na.rm=TRUE);iqr<-q[2]-q[1];lo<-q[1]-1.5*iqr;hi<-q[2]+1.5*iqr;sum(x<lo|x>hi,na.rm=TRUE)}
+skewness <- function(x){x<-x[is.finite(x)];m<-mean(x);s<-sd(x);if(s==0||length(x)<3) return(NA_real_);mean(((x-m)/s)^3)}
+summ_numeric <- function(x){q<-stats::quantile(x,c(.25,.5,.75),na.rm=TRUE);c(n=sum(!is.na(x)),missing=sum(is.na(x)),mean=mean(x,na.rm=TRUE),sd=stats::sd(x,na.rm=TRUE),p25=q[1],median=q[2],p75=q[3],min=min(x,na.rm=TRUE),max=max(x,na.rm=TRUE),skew=skewness(x),outliers_iqr=iqr_outliers(x))}
+num_mat <- t(vapply(dat[vars_num], summ_numeric, FUN.VALUE=numeric(10)))
+summary_table <- data.frame(variable=rownames(num_mat), num_mat, row.names=NULL)
+fmt_num <- function(x) ifelse(is.na(x), NA, format(x, big.mark=",", scientific=FALSE, trim=TRUE, digits=4))
+for(cc in names(summary_table)) if(cc!="variable") summary_table[[cc]] <- fmt_num(summary_table[[cc]])
+mode_counts <- as.data.frame(table(dat$mode))
+names(mode_counts) <- c("mode","count")
+mode_counts$prop_pct <- round(100*mode_counts$count/sum(mode_counts$count),1)
+cat("Predictor Summary Table (Complete Cases = ", n_obs, ")\n", sep="")
+print(summary_table, row.names=FALSE)
+cat("\nMode distribution (complete cases = ", n_obs, "):\n", sep="")
+apply(mode_counts, 1, function(r) cat(r[1], ": ", r[2], " (", r[3], "%)\n", sep=""))
